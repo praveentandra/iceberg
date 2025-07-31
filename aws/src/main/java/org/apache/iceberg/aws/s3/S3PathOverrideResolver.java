@@ -20,6 +20,7 @@ package org.apache.iceberg.aws.s3;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.TreeMap;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
@@ -94,7 +95,9 @@ public class S3PathOverrideResolver implements Serializable {
   }
 
   private Map<String, PathMapping> parseMappings(Map<String, String> properties) {
-    Map<String, PathMapping> result = new TreeMap<>();
+    // Sort by prefix length (descending) to ensure longer prefixes match first
+    Map<String, PathMapping> result = new TreeMap<>(
+        Comparator.comparing(String::length).reversed().thenComparing(Comparator.naturalOrder()));
 
     if (!enabled) {
       return result;
