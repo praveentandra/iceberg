@@ -19,8 +19,8 @@
 package org.apache.iceberg.aws.s3;
 
 import java.io.Serializable;
-import java.util.List;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
@@ -36,6 +36,14 @@ import org.slf4j.LoggerFactory;
  */
 public class S3PathOverrideResolver implements Serializable {
   private static final Logger LOG = LoggerFactory.getLogger(S3PathOverrideResolver.class);
+
+  // Serializable comparator for sorting by prefix length (descending)
+  private static final Comparator<String> PREFIX_LENGTH_COMPARATOR =
+      (Comparator<String> & Serializable)
+          (a, b) -> {
+            int lengthCompare = Integer.compare(b.length(), a.length());
+            return lengthCompare != 0 ? lengthCompare : a.compareTo(b);
+          };
 
   private final boolean enabled;
   private final Map<String, PathMapping> mappings;
@@ -96,8 +104,7 @@ public class S3PathOverrideResolver implements Serializable {
 
   private Map<String, PathMapping> parseMappings(Map<String, String> properties) {
     // Sort by prefix length (descending) to ensure longer prefixes match first
-    Map<String, PathMapping> result = new TreeMap<>(
-        Comparator.comparing(String::length).reversed().thenComparing(Comparator.naturalOrder()));
+    Map<String, PathMapping> result = new TreeMap<>(PREFIX_LENGTH_COMPARATOR);
 
     if (!enabled) {
       return result;

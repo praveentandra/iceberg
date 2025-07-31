@@ -623,6 +623,11 @@ public class S3FileIO
    * @return the resolved path (possibly remapped)
    */
   private String resolvePath(String path) {
+    // Ensure resolver is initialized (important for deserialization)
+    if (pathOverrideResolver == null && properties != null) {
+      pathOverrideResolver = new S3PathOverrideResolver(properties);
+    }
+
     if (pathOverrideResolver != null && pathOverrideResolver.isEnabled()) {
       return pathOverrideResolver.resolvePath(path);
     }
