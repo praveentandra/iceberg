@@ -494,6 +494,22 @@ public class S3FileIOProperties implements Serializable {
 
   public static final boolean S3_DIRECTORY_BUCKET_LIST_PREFIX_AS_DIRECTORY_DEFAULT = true;
 
+  /**
+   * Enable path override feature to remap S3 paths at runtime. This allows transparent remapping of
+   * S3 paths without modifying metadata files. Useful for disaster recovery scenarios where data is
+   * replicated to different regions/buckets.
+   */
+  public static final String S3_PATH_OVERRIDE_ENABLED = "s3.path-override.enabled";
+
+  public static final boolean S3_PATH_OVERRIDE_ENABLED_DEFAULT = false;
+
+  /**
+   * Prefix for path override mapping configurations. Example:
+   * s3.path-override.mapping.1.source=s3://source-bucket/data/
+   * s3.path-override.mapping.1.target=s3://target-bucket/data/
+   */
+  public static final String S3_PATH_OVERRIDE_PREFIX = "s3.path-override.mapping.";
+
   private String sseType;
   private String sseKey;
   private String sseMd5;

@@ -106,6 +106,7 @@ public class S3FileIO
   // use modifiable collection for Kryo serde
   private List<StorageCredential> storageCredentials = Lists.newArrayList();
   private transient volatile Map<String, PrefixedS3Client> clientByPrefix;
+  private S3PathOverrideResolver pathOverrideResolver;
 
   /**
    * No-arg constructor to load the FileIO dynamically.
@@ -177,22 +178,27 @@ public class S3FileIO
 
   @Override
   public InputFile newInputFile(String path) {
-    return S3InputFile.fromLocation(path, clientForStoragePath(path), metrics);
+    String resolvedPath = resolvePath(path);
+    return S3InputFile.fromLocation(resolvedPath, clientForStoragePath(resolvedPath), metrics);
   }
 
   @Override
   public InputFile newInputFile(String path, long length) {
-    return S3InputFile.fromLocation(path, length, clientForStoragePath(path), metrics);
+    String resolvedPath = resolvePath(path);
+    return S3InputFile.fromLocation(
+        resolvedPath, length, clientForStoragePath(resolvedPath), metrics);
   }
 
   @Override
   public OutputFile newOutputFile(String path) {
-    return S3OutputFile.fromLocation(path, clientForStoragePath(path), metrics);
+    String resolvedPath = resolvePath(path);
+    return S3OutputFile.fromLocation(resolvedPath, clientForStoragePath(resolvedPath), metrics);
   }
 
   @Override
   public void deleteFile(String path) {
-    PrefixedS3Client client = clientForStoragePath(path);
+    String resolvedPath = resolvePath(path);
+    PrefixedS3Client client = clientForStoragePath(resolvedPath);
     S3FileIOProperties s3FileIOProperties = client.s3FileIOProperties();
     if (s3FileIOProperties.deleteTags() != null && !s3FileIOProperties.deleteTags().isEmpty()) {
       try {
@@ -206,7 +212,7 @@ public class S3FileIO
       return;
     }
 
-    S3URI location = new S3URI(path, s3FileIOProperties.bucketToAccessPointMapping());
+    S3URI location = new S3URI(resolvedPath, s3FileIOProperties.bucketToAccessPointMapping());
     DeleteObjectRequest deleteRequest =
         DeleteObjectRequest.builder().bucket(location.bucket()).key(location.key()).build();
 
@@ -242,9 +248,13 @@ public class S3FileIO
                       path,
                       exc))
           .run(
-              path ->
-                  tagFileToDelete(
-                      clientForStoragePath(path), path, s3FileIOProperties.deleteTags()));
+              p -> {
+                String resolvedPath = resolvePath(p);
+                tagFileToDelete(
+                    clientForStoragePath(resolvedPath),
+                    resolvedPath,
+                    s3FileIOProperties.deleteTags());
+              });
     }
 
     if (s3FileIOProperties.isDeleteEnabled()) {
@@ -252,8 +262,10 @@ public class S3FileIO
           Multimaps.newSetMultimap(Maps.newHashMap(), Sets::newHashSet);
       List<Future<List<String>>> deletionTasks = Lists.newArrayList();
       for (String path : paths) {
-        PrefixedS3Client client = clientForStoragePath(path);
-        S3URI location = new S3URI(path, client.s3FileIOProperties().bucketToAccessPointMapping());
+        String resolvedPath = resolvePath(path);
+        PrefixedS3Client client = clientForStoragePath(resolvedPath);
+        S3URI location =
+            new S3URI(resolvedPath, client.s3FileIOProperties().bucketToAccessPointMapping());
         String bucket = location.bucket();
         String objectKey = location.key();
         bucketToObjects.get(bucket).add(objectKey);
@@ -485,6 +497,7 @@ public class S3FileIO
   @Override
   public void initialize(Map<String, String> props) {
     this.properties = SerializableMap.copyOf(props);
+    this.pathOverrideResolver = new S3PathOverrideResolver(props);
 
     this.createStack =
         PropertyUtil.propertyAsBoolean(properties, "init-creation-stacktrace", true)
@@ -601,5 +614,18 @@ public class S3FileIO
   @Override
   public List<StorageCredential> credentials() {
     return ImmutableList.copyOf(storageCredentials);
+  }
+
+  /**
+   * Resolves the given path using the path override resolver if enabled.
+   *
+   * @param path the original path
+   * @return the resolved path (possibly remapped)
+   */
+  private String resolvePath(String path) {
+    if (pathOverrideResolver != null && pathOverrideResolver.isEnabled()) {
+      return pathOverrideResolver.resolvePath(path);
+    }
+    return path;
   }
 }
